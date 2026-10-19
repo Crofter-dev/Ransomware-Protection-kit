@@ -1,9 +1,9 @@
+from __future__ import annotations
 import math
 import time
 import collections
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional
-from __future__ import annotations
 
 def entropy(data:bytes):
     if not data:
