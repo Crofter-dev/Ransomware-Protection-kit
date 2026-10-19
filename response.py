@@ -14,7 +14,7 @@ class ActionResult:
     detail: str
 
 
-def inspect_process_tree(pid: int) -> ActionResult:
+def inspect_process_tree(pid: int):
     try:
         proc = psutil.Process(pid)
         children = [c.pid for c in proc.children(recursive=True)]
@@ -27,7 +27,7 @@ def inspect_process_tree(pid: int) -> ActionResult:
         return ActionResult("inspect_process_tree", False, str(e))
 
 
-def list_open_files(pid: int) -> ActionResult:
+def list_open_files(pid: int):
     try:
         proc = psutil.Process(pid)
         files = [f.path for f in proc.open_files()]
@@ -36,7 +36,7 @@ def list_open_files(pid: int) -> ActionResult:
         return ActionResult("list_open_files", False, str(e))
 
 
-def check_network_connections(pid: int) -> ActionResult:
+def check_network_connections(pid: int):
     try:
         proc = psutil.Process(pid)
         conns = proc.net_connections(kind="inet")
@@ -46,7 +46,7 @@ def check_network_connections(pid: int) -> ActionResult:
         return ActionResult("check_network_connections", False, str(e))
 
 
-def quarantine_file(path: str) -> ActionResult:
+def quarantine_file(path: str):
     try:
         os.makedirs(QUARANTINE_DIR, exist_ok=True)
         if not os.path.exists(path):
@@ -58,7 +58,7 @@ def quarantine_file(path: str) -> ActionResult:
         return ActionResult("quarantine_file", False, str(e))
 
 
-def kill_process(pid: int) -> ActionResult:
+def kill_process(pid: int):
     try:
         proc = psutil.Process(pid)
         name = proc.name()
