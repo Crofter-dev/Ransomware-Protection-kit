@@ -21,7 +21,8 @@ def shannon_entropy(data: bytes):
 
 @dataclass
 class FileEvent:
-    actor_id: str          
+    actor_id: str
+    path: str
     event_type: str        
     timestamp: float = field(default_factory=time.time)
     entropy_before: Optional[float] = None
