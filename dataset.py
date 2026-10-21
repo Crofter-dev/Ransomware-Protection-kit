@@ -150,8 +150,162 @@ def atk_slow(folder, rng):
 
     return setup, action
 
-BENIGN = [ben_edit, ben_bulk_rename, ben_ext_change, ben_copy_many, ben_download, ben_rewrite_many]
-ATTACK = [atk_rename, atk_inplace, atk_slow]
+# ---------- fast back-to-back scenarios ----------
+# Here the files are created AND changed inside one action, with no pause,
+# so the monitor sees creates and writes in the same window and the
+# "before" and "after" entropy often look identical. The attack versions
+# must still be caught, and the normal versions must not be.
+
+def atk_fast_rename(folder, rng):
+    """Seed files and scramble + rename them straight away."""
+    n = rng.randint(20, 80)
+    delay = rng.choice([0, 0, 0.002, 0.01])
+
+    def setup():
+        os.makedirs(folder, exist_ok=True)
+
+    def action():
+        sim.seed_target(folder, n)
+        sim.run_encrypt_pass(folder, delay)
+
+    return setup, action
+
+
+def atk_fast_inplace(folder, rng):
+    """Create files and scramble them in place, no rename, no pause."""
+    n = rng.randint(20, 80)
+    delay = rng.choice([0, 0, 0.002, 0.01])
+
+    def setup():
+        os.makedirs(folder, exist_ok=True)
+
+    def action():
+        sim.seed_target(folder, n)
+        for name in _files(folder):
+            path = os.path.join(folder, name)
+            with open(path, "rb") as f:
+                data = f.read()
+            with open(path, "wb") as f:
+                f.write(sim._xor_bytes(data))
+            time.sleep(delay)
+
+    return setup, action
+
+
+def ben_fast_build(folder, rng):
+    """Generate many files, then rewrite each at once (build or export output)."""
+    n = rng.randint(20, 80)
+    delay = rng.choice([0, 0, 0.002, 0.01])
+
+    def setup():
+        os.makedirs(folder, exist_ok=True)
+
+    def action():
+        _text_files(folder, n, rng, prefix="out")
+        for name in _files(folder):
+            with open(os.path.join(folder, name), "w") as f:
+                f.write("final build output line\n" * rng.randint(10, 60))
+            time.sleep(delay)
+
+    return setup, action
+
+
+def ben_fast_extract(folder, rng):
+    """Unpack many files, then rename them into place at once."""
+    n = rng.randint(20, 80)
+    delay = rng.choice([0, 0, 0.002, 0.01])
+
+    def setup():
+        os.makedirs(folder, exist_ok=True)
+
+    def action():
+        _text_files(folder, n, rng, prefix="item", ext=".tmp")
+        for name in _files(folder):
+            base, _ = os.path.splitext(name)
+            os.rename(os.path.join(folder, name), os.path.join(folder, base + ".txt"))
+            time.sleep(delay)
+
+    return setup, action
+
+
+# ---------- harder normal cases: compression, backups, media ----------
+# These write lots of high-randomness data, which is exactly what the
+# attack does, so they are the likeliest source of false alarms.
+
+def ben_zip_many(folder, rng):
+    """Pack many files into a few zip archives."""
+    n = rng.randint(20, 80)
+
+    def setup():
+        _text_files(folder, n, rng)
+
+    def action():
+        import zipfile
+        names = _files(folder)
+        parts = rng.randint(1, 4)
+        for k in range(parts):
+            with zipfile.ZipFile(os.path.join(folder, f"archive_{k}.zip"), "w", zipfile.ZIP_DEFLATED) as z:
+                for name in names[k::parts]:
+                    z.write(os.path.join(folder, name), name)
+            time.sleep(rng.uniform(0, 0.3))
+
+    return setup, action
+
+
+def ben_gzip_each(folder, rng):
+    """Compress every file to its own .gz and keep the originals (gzip -k)."""
+    n = rng.randint(15, 60)
+    delay = rng.choice([0, 0.005, 0.02])
+
+    def setup():
+        _text_files(folder, n, rng)
+
+    def action():
+        import gzip
+        for name in _files(folder):
+            path = os.path.join(folder, name)
+            with open(path, "rb") as src, gzip.open(path + ".gz", "wb") as dst:
+                dst.write(src.read())
+            time.sleep(delay)
+
+    return setup, action
+
+
+def ben_encrypted_backup(folder, rng):
+    """Write many encrypted-looking backup files next to the originals."""
+    n = rng.randint(15, 60)
+    delay = rng.choice([0, 0.005, 0.02])
+
+    def setup():
+        _text_files(folder, n, rng)
+
+    def action():
+        for name in _files(folder):
+            with open(os.path.join(folder, name + ".bak"), "wb") as f:
+                f.write(os.urandom(rng.randint(2_000, 20_000)))
+            time.sleep(delay)
+
+    return setup, action
+
+
+def ben_media_import(folder, rng):
+    """Import a batch of photos or videos (random-looking binary files)."""
+    def setup():
+        os.makedirs(folder, exist_ok=True)
+
+    def action():
+        for i in range(rng.randint(15, 60)):
+            with open(os.path.join(folder, f"IMG_{i:04d}.jpg"), "wb") as f:
+                f.write(os.urandom(rng.randint(5_000, 60_000)))
+            time.sleep(rng.choice([0, 0.01, 0.05]))
+
+    return setup, action
+
+
+BENIGN = [ben_edit, ben_bulk_rename, ben_ext_change, ben_copy_many, ben_download, ben_rewrite_many,
+          ben_fast_build, ben_fast_extract,
+          ben_zip_many, ben_gzip_each, ben_encrypted_backup, ben_media_import]
+ATTACK = [atk_rename, atk_inplace, atk_slow, atk_fast_rename, atk_fast_inplace]
 
 def main():
     ap = argparse.ArgumentParser()
