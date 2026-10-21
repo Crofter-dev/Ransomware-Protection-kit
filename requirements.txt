@@ -1,0 +1,13 @@
+# Core (needed to detect and respond)
+watchdog>=4.0        # file-system events
+lightgbm>=4.0        # the detector model
+numpy>=1.26
+pandas>=2.0
+psutil>=5.9          # process info and killing
+
+# Needed only for training and model comparison (train_model.py, compare_models.py)
+scikit-learn>=1.3
+
+# Optional: nothing to install for the local explainer.
+# It talks to Ollama over HTTP using the standard library.
+# Install Ollama separately from https://ollama.com if you want it.
