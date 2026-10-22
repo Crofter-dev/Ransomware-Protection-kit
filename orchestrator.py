@@ -8,6 +8,7 @@ from detector import RansomwareDetector
 from explainer import explain
 from feature_extraction import WindowFeatures
 from file_monitor import FileMonitor
+from nortifier import Notifier
 
 def _resolve_pid(actor_id: str):
     try:
@@ -30,7 +31,8 @@ def carry_out(decision, pid: int | None) -> list[str]:
 
 
 def handle_windows(windows: list[WindowFeatures], detector: RansomwareDetector,
-                   policy: Policy, enforce: bool, local_model: str | None, ollama_host: str) -> None:
+                   policy: Policy, enforce: bool, local_model: str | None, ollama_host: str,
+                   notifier: Notifier | None = None) -> None:
     for w in windows:
         score = detector.score(w)
         tag = "SUSPICIOUS" if score >= policy.detect_threshold else "ok"
@@ -48,6 +50,8 @@ def handle_windows(windows: list[WindowFeatures], detector: RansomwareDetector,
 
         print("----- incident -----")
         print(explain(decision, w, proc, score, local_model=local_model, ollama_host=ollama_host))
+        if notifier:
+            notifier.send(decision, w, proc, score, acted=enforce)
         if decision.actions:
             if enforce:
                 for line in carry_out(decision, pid):
@@ -56,8 +60,7 @@ def handle_windows(windows: list[WindowFeatures], detector: RansomwareDetector,
                 print("[dry run] no action taken (add --enforce to act)")
         print("--------------------")
 
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--watch-dir", default="./watched")
     parser.add_argument("--threshold", type=float, default=0.7)
@@ -66,16 +69,21 @@ def main():
     parser.add_argument("--local-model", default=None,
                         help="Name of a model served by a local Ollama, used only to word the summary.")
     parser.add_argument("--ollama-host", default="http://localhost:11434")
+    parser.add_argument("--notify", action="store_true",
+                        help="Show a desktop notification for each alert or action.")
+    parser.add_argument("--notify-cooldown", type=float, default=60.0,
+                        help="Seconds between notifications for the same folder.")
     args = parser.parse_args()
 
     os.makedirs(args.watch_dir, exist_ok=True)
     detector = RansomwareDetector(threshold=args.threshold)
     policy = Policy(detect_threshold=args.threshold)
+    notifier = Notifier(args.notify_cooldown) if args.notify else None
 
     monitor = FileMonitor(
         args.watch_dir,
         on_windows=lambda windows: handle_windows(
-            windows, detector, policy, args.enforce, args.local_model, args.ollama_host
+            windows, detector, policy, args.enforce, args.local_model, args.ollama_host, notifier
         ),
     )
     monitor.start()
@@ -87,6 +95,7 @@ def main():
             time.sleep(1)
     except KeyboardInterrupt:
         monitor.stop()
+
 
 if __name__ == "__main__":
     main()
